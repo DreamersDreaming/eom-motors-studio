@@ -5,32 +5,60 @@ import Showroom from './components/Showroom';
 import Reviews from './components/Reviews';
 import Footer from './components/Footer';
 import AdminPanel from './components/AdminPanel';
-import { StorageService } from './services/storageService';
+import { DBService } from './services/firebase';
+import { StorageService } from './services/storageService'; 
 import { Car, SiteConfig, Review } from './types';
+import { ASSETS } from './constants';
 
 const App: React.FC = () => {
+  const [loading, setLoading] = useState(true);
   const [inventory, setInventory] = useState<Car[]>([]);
   const [trash, setTrash] = useState<Car[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [config, setConfig] = useState<SiteConfig>(StorageService.getSettings());
+  
+  const [config, setConfig] = useState<SiteConfig>({
+    brandName: 'EOM',
+    brandNameHighlight: 'MOTORS',
+    heroTitle: '투명함이 만드는 프리미엄',
+    heroSubtitle: '',
+    heroImageUrl: '',
+    ceoName: '',
+    ceoImageUrl: ASSETS.CEO_IMAGE_URL,
+    contactPhone: '',
+    contactEmail: '',
+    contactAddress: '',
+    licenseNumber: ''
+  });
   
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
 
-  // Initialize data
+  // Fetch Data (Async)
   useEffect(() => {
-    setInventory(StorageService.getInventory());
-    setTrash(StorageService.getTrash());
-    setReviews(StorageService.getReviews());
-    setConfig(StorageService.getSettings());
+    const initData = async () => {
+      setLoading(true);
+      try {
+        const [invData, revData, confData] = await Promise.all([
+          DBService.getInventory(),
+          DBService.getReviews(),
+          DBService.getSettings()
+        ]);
+        setInventory(invData);
+        setReviews(revData);
+        setConfig(confData);
+        setTrash(StorageService.getTrash()); // Trash stays local
+      } catch (e) {
+        console.error("Failed to load data", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    initData();
   }, []);
 
-  // Persistence Effects
-  useEffect(() => { if (inventory.length > 0 || trash.length > 0) StorageService.saveInventory(inventory); }, [inventory]);
+  // 휴지통만 로컬 스토리지 동기화 유지
   useEffect(() => { StorageService.saveTrash(trash); }, [trash]);
-  useEffect(() => { if (reviews.length > 0) StorageService.saveReviews(reviews); }, [reviews]);
-  useEffect(() => { StorageService.saveSettings(config); }, [config]);
 
   // Admin Security Logic
   const handleAdminClick = () => {
@@ -43,7 +71,7 @@ const App: React.FC = () => {
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === '1234') { // Simple Client-side Security
+    if (passwordInput === '1234') { 
       setIsAdmin(true);
       setShowLoginModal(false);
       setPasswordInput('');
@@ -53,28 +81,33 @@ const App: React.FC = () => {
     }
   };
 
-  // CRUD Handlers
-  const handleSaveCar = (car: Car) => {
+  // CRUD Handlers (Updated to Async)
+  const handleSaveCar = async (car: Car) => {
+    // Optimistic UI Update (화면 먼저 갱신)
     if (inventory.some(c => c.id === car.id)) {
       setInventory(prev => prev.map(c => c.id === car.id ? car : c));
     } else {
       setInventory(prev => [car, ...prev]);
     }
+    // DB Save
+    await DBService.saveCar(car);
   };
 
-  const handleSoftDeleteCar = (id: string) => {
+  const handleSoftDeleteCar = async (id: string) => {
     const carToDelete = inventory.find(c => c.id === id);
     if (carToDelete) {
       setInventory(prev => prev.filter(c => c.id !== id));
       setTrash(prev => [carToDelete, ...prev]);
+      await DBService.deleteCar(id);
     }
   };
 
-  const handleRestoreCar = (id: string) => {
+  const handleRestoreCar = async (id: string) => {
     const carToRestore = trash.find(c => c.id === id);
     if (carToRestore) {
       setTrash(prev => prev.filter(c => c.id !== id));
       setInventory(prev => [carToRestore, ...prev]);
+      await DBService.saveCar(carToRestore);
     }
   };
 
@@ -82,31 +115,41 @@ const App: React.FC = () => {
     setTrash(prev => prev.filter(c => c.id !== id));
   };
   
-  const handleAddReview = (review: Review) => {
+  const handleAddReview = async (review: Review) => {
     setReviews(prev => [review, ...prev]);
+    await DBService.saveReview(review);
   };
 
-  const handleDeleteReview = (id: string) => {
+  const handleDeleteReview = async (id: string) => {
     setReviews(prev => prev.filter(r => r.id !== id));
+    await DBService.deleteReview(id);
   };
 
   const handleEditClick = (id: string) => {
-    // Showroom에서 수정 버튼 클릭 시 바로 로그인 모달 혹은 관리자 패널로 연결
     if (!isAdmin) {
       setShowLoginModal(true);
     } 
   };
 
-  const handleSaveConfig = (newConfig: SiteConfig) => {
+  const handleSaveConfig = async (newConfig: SiteConfig) => {
     setConfig(newConfig);
+    await DBService.saveSettings(newConfig);
   };
 
-  // Backup & Restore Handlers
   const handleRestoreData = (data: { inventory?: Car[], trash?: Car[], reviews?: Review[], config?: SiteConfig }) => {
-    if (data.inventory) setInventory(data.inventory);
+    if (data.inventory) {
+        setInventory(data.inventory);
+        data.inventory.forEach(c => DBService.saveCar(c));
+    }
     if (data.trash) setTrash(data.trash);
-    if (data.reviews) setReviews(data.reviews);
-    if (data.config) setConfig(data.config);
+    if (data.reviews) {
+        setReviews(data.reviews);
+        data.reviews.forEach(r => DBService.saveReview(r));
+    }
+    if (data.config) {
+        setConfig(data.config);
+        DBService.saveSettings(data.config);
+    }
   };
 
   const handleFactoryReset = () => {
@@ -114,11 +157,21 @@ const App: React.FC = () => {
     window.location.reload();
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-brand-black flex items-center justify-center">
+        <div className="text-center">
+          <i className="fas fa-circle-notch fa-spin text-4xl text-brand-blue mb-4"></i>
+          <p className="text-gray-400">엄모터스 스튜디오 로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-brand-black text-white selection:bg-brand-blue selection:text-white">
       <Navbar onAdminClick={handleAdminClick} isAdmin={isAdmin} config={config} />
       
-      {/* Admin Login Modal */}
       {showLoginModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fade-in">
           <div className="bg-gray-900 border border-gray-700 p-8 rounded-2xl shadow-2xl w-full max-w-sm">
@@ -148,7 +201,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Admin Panel Overlay */}
       {isAdmin && (
         <AdminPanel 
           inventory={inventory}
@@ -168,11 +220,7 @@ const App: React.FC = () => {
       )}
 
       <Hero config={config} />
-      <Showroom 
-        inventory={inventory} 
-        isAdmin={isAdmin} 
-        onEdit={handleEditClick} 
-      />
+      <Showroom inventory={inventory} isAdmin={isAdmin} onEdit={handleEditClick} />
       <Reviews reviews={reviews} onAddReview={handleAddReview} />
       <Footer config={config} />
     </div>

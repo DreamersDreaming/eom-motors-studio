@@ -1,14 +1,14 @@
 import { Car, Review, SiteConfig } from '../types';
-import { INITIAL_INVENTORY, REVIEWS } from '../constants';
+import { INITIAL_INVENTORY, REVIEWS, ASSETS } from '../constants';
 
 // Production Keys
-// INVENTORY, TRASH, REVIEWS는 v1을 유지하여 기존 데이터 보존
-// SETTINGS는 v3로 변경하여 기존의 꼬인 설정(CEO 이미지 등)을 초기화하고 새로운 기본값 적용
+// INVENTORY, TRASH, REVIEWS는 v1을 유지하여 데이터 보존
+// SETTINGS는 v8로 변경하여 최신 이미지 에셋 적용 및 강제 업데이트
 const STORAGE_KEYS = {
   INVENTORY: 'eom_motors_prod_v1_inventory', 
   TRASH: 'eom_motors_prod_v1_trash',
   REVIEWS: 'eom_motors_prod_v1_reviews',
-  SETTINGS: 'eom_motors_prod_v3_settings',
+  SETTINGS: 'eom_motors_prod_v8_settings',
 };
 
 const DEFAULT_SETTINGS: SiteConfig = {
@@ -18,8 +18,8 @@ const DEFAULT_SETTINGS: SiteConfig = {
   heroSubtitle: '당신의 드림카가 현실이 됩니다.\n엄선된 퀄리티, 정직한 가격을 약속합니다.',
   heroImageUrl: 'https://picsum.photos/seed/carhero/1920/1080',
   ceoName: '엄 희 철',
-  // User provided specific Google Photo URL as default
-  ceoImageUrl: 'https://lh3.googleusercontent.com/gg-dl/ABS2GSm0P3Oo32Dzo4v-h7elYJORtjPkVl5KczFf32pm5f56qRaNB1yrVe-zpbvaPGilPZy99FFHRgtFzCs-yxGO0Lo633UmttxKDxdRfPMebzDNc4MxhEICYV1lOD_zNaRgd69ZBZvpMNxbKKDkzMQhg32g-qtEb-WoFwIHawdCSw0TWvjLgg=s1024-rj', 
+  // Use Centralized Asset
+  ceoImageUrl: ASSETS.CEO_IMAGE_URL, 
   contactPhone: '010-9288-2333',
   contactEmail: 'contact@eom-motors.com',
   contactAddress: '대구 서구 문화로 37 엠월드 4층 408호 엄모터스',
@@ -39,10 +39,9 @@ export const StorageService = {
   saveInventory: (inventory: Car[]) => {
     try {
       localStorage.setItem(STORAGE_KEYS.INVENTORY, JSON.stringify(inventory));
+      return true;
     } catch (e) {
-      if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-        alert('⚠️ 브라우저 저장 공간이 부족합니다!\n\n이미지가 너무 많거나 큽니다. 오래된 매물을 삭제하거나 이미지를 줄여주세요.');
-      }
+      throw new Error('STORAGE_FULL');
     }
   },
 
@@ -83,7 +82,13 @@ export const StorageService = {
   getSettings: (): SiteConfig => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      const parsed = data ? JSON.parse(data) : DEFAULT_SETTINGS;
+      // 데이터가 없거나, ceoImageUrl이 비어있으면 기본값 사용
+      if (!data) return DEFAULT_SETTINGS;
+      
+      const parsed = JSON.parse(data);
+      if (!parsed.ceoImageUrl) {
+        parsed.ceoImageUrl = ASSETS.CEO_IMAGE_URL;
+      }
       return { ...DEFAULT_SETTINGS, ...parsed };
     } catch {
       return DEFAULT_SETTINGS;
@@ -93,17 +98,24 @@ export const StorageService = {
   saveSettings: (settings: SiteConfig) => {
     try {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return true;
     } catch (e) {
-       if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-        alert('⚠️ 설정 저장 실패: 저장 공간이 부족합니다.');
-      }
+       throw new Error('STORAGE_FULL');
     }
   },
 
   clearAll: () => {
+    // Current Keys
     localStorage.removeItem(STORAGE_KEYS.INVENTORY);
     localStorage.removeItem(STORAGE_KEYS.TRASH);
     localStorage.removeItem(STORAGE_KEYS.REVIEWS);
     localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+    
+    // Cleanup Legacy Keys (Optional but good for hygiene)
+    Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('eom_motors_prod_')) {
+            localStorage.removeItem(key);
+        }
+    });
   }
 };

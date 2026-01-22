@@ -1,7 +1,12 @@
 import { Car, Review } from './types';
 
-// [긴급 수정] 포르쉐 매물의 텍스트 정보를 사용자 원본(화이트)으로 복구하고, 로딩 오류가 없는 안정적인 화이트 포르쉐 이미지로 교체했습니다.
-// [추가 수정] 도요타 캠리와 아우디 A6 이미지를 새로운 안정적인 URL로 교체했습니다.
+// Centralized Assets
+// 구글 드라이브 Direct Link (lh3.googleusercontent.com 형식 사용)
+export const ASSETS = {
+  CEO_IMAGE_URL: 'https://lh3.googleusercontent.com/d/1Lgawno7r8PfNhwOfOK4FyL3hSu9NSMns',
+  DEFAULT_CAR_IMAGE: 'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?q=80&w=1000',
+  PLACEHOLDER_IMAGE: 'https://placehold.co/800x600/121212/2563EB?text=EOM+MOTORS'
+};
 
 export const INITIAL_INVENTORY: Car[] = [
   {
@@ -379,7 +384,7 @@ export const REVIEWS: Review[] = [
     id: 'r16',
     author: '한*민 고객님',
     title: '레이 밴, 업무용으로 딱입니다',
-    content: '배달 업무용으로 레이 밴 구매했습니다. 짐 싣기 편하고 경차 혜택도 있어서 유지비가 거의 안 드네요. 사업자 세금계산서 발행도 깔끔하게 처리해주시고 사장님이 사업 번창하라고 응원해주셔서 기분 좋게 거래했습니다.',
+    content: '배달 업무용으로 레이 밴 구매했습니다. 짐 싣기 편하고 경차 혜택도 있어서 유지비가 거의 안 드네요. 사업자 세금계산서 발행도 깔끔하게 처리해주셔서 감사합니다.',
     carModel: 'Kia Ray',
     rating: 5,
     date: '2023.11.11',
